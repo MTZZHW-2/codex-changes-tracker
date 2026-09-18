@@ -1,0 +1,62 @@
+[
+  {
+    "pr": 46335,
+    "merged_at": "2026-09-18T00:59:25Z",
+    "title": "MCP 策略评估固定使用当前 turn 的环境快照，避免中途环境变更影响当前 turn",
+    "url": "https://github.com/openai/codex/pull/46335"
+  },
+  {
+    "pr": 46334,
+    "merged_at": "2026-09-18T00:51:48Z",
+    "title": "统一路径、网络与沙箱配置中的平台识别逻辑",
+    "url": "https://github.com/openai/codex/pull/46334"
+  },
+  {
+    "pr": 46333,
+    "merged_at": "2026-09-18T00:36:21Z",
+    "title": "修复 Windows 沙箱账户被禁用时的清理与恢复流程",
+    "url": "https://github.com/openai/codex/pull/46333"
+  },
+  {
+    "pr": 46332,
+    "merged_at": "2026-09-18T00:35:58Z",
+    "title": "TUI 中的会话回顾改为弱化显示",
+    "url": "https://github.com/openai/codex/pull/46332"
+  },
+  {
+    "pr": 46331,
+    "merged_at": "2026-09-18T00:27:14Z",
+    "title": "将环境网络策略校验延后到配置合成完成之后",
+    "url": "https://github.com/openai/codex/pull/46331"
+  },
+  {
+    "pr": 46330,
+    "merged_at": "2026-09-18T00:25:51Z",
+    "title": "将重试退避逻辑移动到 codex-async-utils",
+    "url": "https://github.com/openai/codex/pull/46330"
+  },
+  {
+    "pr": 46328,
+    "merged_at": "2026-09-18T00:17:02Z",
+    "title": "无项目目录不再持久化项目信任状态",
+    "url": "https://github.com/openai/codex/pull/46328"
+  },
+  {
+    "pr": 46324,
+    "merged_at": "2026-09-17T23:54:52Z",
+    "title": "压缩失败时扩大回退到当前模型的范围",
+    "url": "https://github.com/openai/codex/pull/46324"
+  },
+  {
+    "pr": 46323,
+    "merged_at": "2026-09-17T23:47:21Z",
+    "title": "在 turn 分析数据中记录当前启用的插件清单",
+    "url": "https://github.com/openai/codex/pull/46323"
+  },
+  {
+    "pr": 46322,
+    "merged_at": "2026-09-17T23:42:21Z",
+    "title": "补充 Windows 沙箱类型相关测试配置",
+    "url": "https://github.com/openai/codex/pull/46322"
+  }
+]
