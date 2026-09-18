@@ -1,5 +1,38 @@
 [
   {
+    "pr": 46495,
+    "merged_at": "2026-09-18T22:53:35Z",
+    "summary": "修正 macOS 打包版 CLI 的代码签名身份：即使被装进 app bundle，CLI 的签名标识仍保持为 codex，避免既有钥匙串访问规则因身份变化而失效。",
+    "details": [
+      "Provisioned macOS CLI 现在明确使用 codex 作为 code-signing identifier，同时继续保留 com.openai.codex.cli 作为 bundle identifier；两者不再被混为同一个身份字段。",
+      "签名验证会同时检查预期的 signing identifier 和 Team，并拒绝被改成其他 bundle identifier、可执行文件名或 package type 的产物，收紧了打包后的身份校验。",
+      "文档和测试补充了签名身份、bundle identity 与钥匙串兼容性的区别；测试本身没有验证真实运行时的 Keychain 访问或凭据恢复，因此这次主要是在保证打包身份兼容和验证规则正确。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46495"
+  },
+  {
+    "pr": 46494,
+    "merged_at": "2026-09-18T22:53:12Z",
+    "summary": "远程模式下的 workspace roots 改由远端服务器控制，避免客户端本机路径误传到服务器并覆盖真正的远端工作区。",
+    "details": [
+      "通过 --remote 启动、恢复或 fork 会话时，客户端不再把自己的 runtimeWorkspaceRoots 发给远端 app server，而是让服务器使用自身默认值或恢复之前保存的 roots。",
+      "从正在运行的远端会话或 side conversation fork 时，会继续保留服务器提供的 workspace roots，即使客户端期间重新加载过本地配置也不会把它们覆盖掉。",
+      "使用 --remote 时，CLI 会在连接前直接拒绝 --add-dir 和 sandbox_workspace_write.writable_roots 这类本地路径覆盖，并提示应在服务器端配置额外 roots；网络访问相关覆盖仍然可以使用。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46494"
+  },
+  {
+    "pr": 46493,
+    "merged_at": "2026-09-18T22:52:50Z",
+    "summary": "MCP 仍在启动时现在也可以打开 /review 或提交 review 指令，不再把单纯的 MCP 初始化误判成“当前不能 review”。",
+    "details": [
+      "review 是否可用的判断被延后到真正 dispatch 时执行，这时可以看到线程的实际状态，因此 MCP 启动本身不再阻止 review picker 和 inline review instructions。",
+      "如果确实存在前台工作正在运行、等待或已排队，live review 仍会被拒绝，但当前草稿和附件会保留，不会因为失败的 review 尝试被清空。",
+      "live dispatch 与 queued dispatch 现在被区分处理，已经排队的 review 打开时不会误删用户后来在 composer 中写的新草稿。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46493"
+  },
+  {
     "pr": 46492,
     "merged_at": "2026-09-18T22:51:26Z",
     "summary": "统一并限制 TUI 中命令与 MCP 工具结果的预览：默认只显示前 3 个折行后的可见行，其余内容仍保留在完整 transcript 中。",
