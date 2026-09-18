@@ -1,0 +1,13 @@
+{
+  "name": "codex-changes-video",
+  "private": true,
+  "scripts": {
+    "render": "remotion render src/index.tsx DailyCodexChanges ../codex-remotion-preview.mp4 --codec=h264 --crf=18"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.506",
+    "remotion": "4.0.506",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  }
+}
