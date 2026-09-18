@@ -1,13 +1,16 @@
 import React from 'react';
+import {Audio} from '@remotion/media';
 import {
   AbsoluteFill,
   Composition,
   Sequence,
   interpolate,
   registerRoot,
+  staticFile,
   useCurrentFrame,
 } from 'remotion';
 import changesJson from '../../changes.json';
+import voiceMetaJson from './voice-meta.json';
 
 type Change = {
   pr: number;
@@ -17,9 +20,10 @@ type Change = {
   url: string;
 };
 
+type VoiceMeta = Record<string, {seconds: number; frames: number}>;
+
 const FPS = 30;
 const INTRO = 90;
-const ITEM = 180;
 const OUTRO = 60;
 
 const sgDate = (iso: string) =>
@@ -34,7 +38,16 @@ const all = (changesJson as Change[])
 
 const date = all.length ? sgDate(all[0].merged_at) : '—';
 const changes = all.filter((x) => sgDate(x.merged_at) === date);
-const duration = INTRO + changes.length * ITEM + OUTRO;
+const voiceMeta = voiceMetaJson as VoiceMeta;
+const itemFrames = changes.map((item) => voiceMeta[String(item.pr)]?.frames ?? 180);
+
+const offsets = itemFrames.reduce<number[]>((result, frames, index) => {
+  result.push(index === 0 ? INTRO : result[index - 1] + itemFrames[index - 1]);
+  return result;
+}, []);
+
+const contentFrames = itemFrames.reduce((sum, value) => sum + value, 0);
+const duration = INTRO + contentFrames + OUTRO;
 
 const page: React.CSSProperties = {
   backgroundColor: '#0b0b0c',
@@ -44,12 +57,14 @@ const page: React.CSSProperties = {
 
 const Intro: React.FC = () => {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 18], [0, 1], {
-    extrapolateRight: 'clamp',
-  });
   return (
     <AbsoluteFill style={{...page, padding: '130px 150px', justifyContent: 'center'}}>
-      <div style={{opacity}}>
+      <div
+        style={{
+          opacity: interpolate(frame, [0, 18], [0, 1], {extrapolateRight: 'clamp'}),
+          translate: `0 ${interpolate(frame, [0, 18], [24, 0], {extrapolateRight: 'clamp'})}px`,
+        }}
+      >
         <div style={{fontSize: 94, fontWeight: 700}}>Codex Changes</div>
         <div style={{fontSize: 38, color: '#99999f', marginTop: 28}}>{date}</div>
         <div style={{height: 1, background: '#36363a', margin: '52px 0 42px'}} />
@@ -59,19 +74,27 @@ const Intro: React.FC = () => {
   );
 };
 
-const ChangeScene: React.FC<{item: Change; index: number}> = ({item, index}) => {
+const ChangeScene: React.FC<{
+  item: Change;
+  index: number;
+  durationFrames: number;
+}> = ({item, index, durationFrames}) => {
   const frame = useCurrentFrame();
-  const fade = interpolate(frame, [0, 12, 166, 179], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const progress = interpolate(frame, [0, ITEM - 1], [0, 100], {
+  const fade = interpolate(
+    frame,
+    [0, 12, Math.max(13, durationFrames - 14), durationFrames - 1],
+    [0, 1, 1, 0],
+    {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}
+  );
+  const progress = interpolate(frame, [0, durationFrames - 1], [0, 100], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
   return (
     <AbsoluteFill style={{...page, padding: '82px 110px 72px', opacity: fade}}>
+      <Audio src={staticFile(`audio/${item.pr}.mp3`)} from={12} />
+
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
         <div style={{display: 'flex', gap: 28, alignItems: 'center'}}>
           <div style={{fontSize: 38, color: '#b0b0b5'}}>PR #{item.pr}</div>
@@ -131,13 +154,17 @@ const ChangeScene: React.FC<{item: Change; index: number}> = ({item, index}) => 
 
 const Outro: React.FC = () => {
   const frame = useCurrentFrame();
-  const opacity = interpolate(frame, [0, 16, 44, 59], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
   return (
     <AbsoluteFill style={{...page, justifyContent: 'center', alignItems: 'center'}}>
-      <div style={{textAlign: 'center', opacity}}>
+      <div
+        style={{
+          textAlign: 'center',
+          opacity: interpolate(frame, [0, 16, 44, 59], [0, 1, 1, 0], {
+            extrapolateLeft: 'clamp',
+            extrapolateRight: 'clamp',
+          }),
+        }}
+      >
         <div style={{fontSize: 78, fontWeight: 700}}>Codex Changes</div>
         <div style={{fontSize: 32, color: '#77777d', marginTop: 24}}>{date}</div>
       </div>
@@ -147,13 +174,25 @@ const Outro: React.FC = () => {
 
 const Video: React.FC = () => (
   <AbsoluteFill style={page}>
-    <Sequence from={0} durationInFrames={INTRO}><Intro /></Sequence>
+    <Sequence from={0} durationInFrames={INTRO}>
+      <Intro />
+    </Sequence>
+
     {changes.map((item, index) => (
-      <Sequence key={item.pr} from={INTRO + index * ITEM} durationInFrames={ITEM}>
-        <ChangeScene item={item} index={index} />
+      <Sequence
+        key={item.pr}
+        from={offsets[index]}
+        durationInFrames={itemFrames[index]}
+      >
+        <ChangeScene
+          item={item}
+          index={index}
+          durationFrames={itemFrames[index]}
+        />
       </Sequence>
     ))}
-    <Sequence from={INTRO + changes.length * ITEM} durationInFrames={OUTRO}>
+
+    <Sequence from={INTRO + contentFrames} durationInFrames={OUTRO}>
       <Outro />
     </Sequence>
   </AbsoluteFill>
