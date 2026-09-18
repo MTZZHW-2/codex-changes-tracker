@@ -1,6 +1,6 @@
 {
   "name": "codex-changes-video",
-  "private": true,
+  "private": true,\n  "version": "0.0.0",
   "scripts": {
     "render": "remotion render src/index.tsx DailyCodexChanges ../codex-remotion-preview.mp4 --codec=h264 --crf=18"
   },
