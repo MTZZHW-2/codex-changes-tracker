@@ -31,13 +31,11 @@
     fetch('./changes.json')
       .then(r => r.json())
       .then(items => {
-        const tbody = document.querySelector('#changes');
-        tbody.innerHTML = items.map(item => {
-          const time = new Date(item.mergedAt).toLocaleString('zh-CN', {hour12:false});
-          return `<tr><td>${time}</td><td><a href="${item.url}" target="_blank" rel="noreferrer">#${item.pr}</a></td><td>${item.summary}</td></tr>`;
+        document.querySelector('#changes').innerHTML = items.map(item => {
+          const time = new Date(item.merged_at).toLocaleString('zh-CN', {hour12:false});
+          return `<tr><td>${time}</td><td><a href="${item.url}" target="_blank" rel="noreferrer">#${item.pr}</a></td><td>${item.title}</td></tr>`;
         }).join('');
-      })
-      .catch(() => {});
+      });
   </script>
 </body>
 </html>
