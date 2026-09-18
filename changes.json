@@ -1,5 +1,73 @@
 [
   {
+    "pr": 46492,
+    "merged_at": "2026-09-18T22:51:26Z",
+    "summary": "统一并限制 TUI 中命令与 MCP 工具结果的预览：默认只显示前 3 个折行后的可见行，其余内容仍保留在完整 transcript 中。",
+    "details": [
+      "Agent 命令输出和 MCP 结果改用同一套预览渲染器，预览只显示前三个可见行，并提示还有多少内容被隐藏以及可用 ctrl + t 查看完整 transcript。",
+      "多个 MCP 结果块共享同一个三行预算；超长 URL 会强制折行，部分显示的逻辑行也会计入隐藏行数，避免工具输出把 TUI 撑得过高。",
+      "完整 MCP 文本仍会保存在 transcript 和 raw output 中，包括失败末尾的诊断信息；同时先限制进入预览渲染器的输入规模，减少超长行或组合字符带来的额外渲染开销。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46492"
+  },
+  {
+    "pr": 46490,
+    "merged_at": "2026-09-18T22:43:00Z",
+    "summary": "让配置了 gateway_oauth 的模型提供商真正能同时携带“主认证 + 网关 OAuth”访问推理和模型发现接口。",
+    "details": [
+      "网关 OAuth token 会按配置通过自定义 Header 或 Cookie 附加到请求中，同时保留原本的主认证；WebSocket 握手也会带上对应网关凭据。",
+      "相同配置的 provider 实例和模型发现逻辑会共享网关凭据管理器，因此 token 刷新后各处会看到同一份最新凭据。",
+      "如果网关 OAuth 初始化失败、取 token 失败、token 值非法或与现有认证 Header 冲突，请求会直接被阻止；相关 Header 会按敏感信息处理，也不会把认证发行方的错误细节直接暴露出来。",
+      "gateway OAuth 配置现在也参与模型目录缓存的身份计算，避免不同网关配置错误复用同一份模型缓存。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46490"
+  },
+  {
+    "pr": 46488,
+    "merged_at": "2026-09-18T22:41:39Z",
+    "summary": "仅重组 analytics 模块的测试结构，把一个大型测试文件拆成按功能划分的多个测试套件；生产逻辑没有变化。",
+    "details": [
+      "原来的 analytics_client_tests.rs 被拆成 events、requests、compaction、accepted lines、apps、plugins 等更聚焦的测试文件，共用的测试夹具移动到 support.rs。",
+      "跨事件的到达顺序测试被单独放进 reducer ordering 套件，app 与 plugin 的 ingestion 断言也分别归档，同时保留一条验证混合事件顺序的测试。",
+      "从改动文件看，本 PR 的目的就是整理和维护测试代码，没有新增或修改运行时行为，也没有用户可见功能变化。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46488"
+  },
+  {
+    "pr": 46487,
+    "merged_at": "2026-09-18T22:41:16Z",
+    "summary": "改善 TUI 对连续探索操作的展示：读文件、列目录和搜索即使穿插 reasoning 或出现非零退出，也尽量保持为同一组，且历史重放与实时显示一致。",
+    "details": [
+      "实时执行和重放历史中，相邻的 read、list、search 操作不会再因为中间出现 reasoning 摘要或一次非零退出就被拆成多个探索分组。",
+      "展开 transcript 时 reasoning 会按实际时间顺序保留，但紧凑历史和 raw history 仍不显示 reasoning，避免干扰简略视图。",
+      "紧凑探索条目现在会显示非零退出码；失败的读取不会和成功读取混在同一个成功摘要里；搜索命令的退出码 1 不再一律用红色失败样式，复合命令则统一标记为 command exit。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46487"
+  },
+  {
+    "pr": 46486,
+    "merged_at": "2026-09-18T22:40:50Z",
+    "summary": "让 TUI 的异步提问回复与桌面端使用同一消息格式，解决跨客户端回答后问题不消失、同名问题草稿容易对应错误等问题。",
+    "details": [
+      "TUI 现在用桌面端兼容的 reply envelope 发送答案，并给每个问题使用稳定 ID，因此某个问题在另一客户端回答后，TUI 能准确移除对应问题，而不会误伤标题相同的其他问题。",
+      "从已提交消息或历史重放中恢复问题时，也会按问题 ID 对应回复；回复在 transcript、队列预览和输入历史中会显示成可读的“问题 + 答案”文本。",
+      "输入被拒绝或中断后重试时，会保留每条回复各自的 envelope 和原始顺序；输入长度计算也会考虑 JSON 转义，对异常长的问题 ID 则退回普通文本格式。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46486"
+  },
+  {
+    "pr": 46482,
+    "merged_at": "2026-09-18T22:29:34Z",
+    "summary": "为模型提供商增加 gateway_oauth 配置能力，同时让旧会话遇到未来新增的错误分类时仍能被正常读取。",
+    "details": [
+      "读取保存的会话时，已知错误分类（包括 BioPolicy）仍按原分类恢复；如果遇到当前版本不认识的新分类，则回退为 Other，而不是因为反序列化失败导致整个会话无法读取。",
+      "模型 provider 配置新增可选 gateway_oauth，可声明授权地址、token 地址、client ID、scopes、resource、redirect port，以及把网关 token 放进自定义 Header 或 Cookie 的方式。",
+      "配置层会校验 URL、client ID、redirect port、Header/Cookie 名称等，并拒绝与 AWS 认证组合、使用保留 Header 或和现有 provider Header 冲突的配置。",
+      "这一 PR 主要加入配置结构和校验能力；真正把网关 token 注入推理和模型发现请求的运行时逻辑是在后续 #46490 中完成。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46482"
+  },
+  {
     "pr": 46335,
     "merged_at": "2026-09-18T00:59:25Z",
     "summary": "修复同一轮对话中 MCP 工具可用性被后续环境变更提前影响的问题。",
