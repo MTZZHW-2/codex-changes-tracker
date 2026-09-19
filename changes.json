@@ -1,5 +1,275 @@
 [
   {
+    "pr": 46524,
+    "merged_at": "2026-09-19T00:08:31Z",
+    "summary": "仅修复 packaged daemon 测试在 Linux CI 上偶发无法启动新复制可执行文件的问题；生产运行逻辑没有变化。",
+    "details": [
+      "Linux CI 中刚复制出的可执行文件可能短暂处于 ExecutableFileBusy 状态，导致 daemon 打包测试在启动阶段偶发失败。",
+      "测试启动器遇到这一特定错误时会最多重试两次，每次间隔 10 ms；其他启动错误仍立即返回，不会被掩盖。",
+      "改动针对测试稳定性，没有修改 Codex 正常运行时启动 daemon 的行为。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46524"
+  },
+  {
+    "pr": 46523,
+    "merged_at": "2026-09-19T00:00:15Z",
+    "summary": "Windows MXC 的受管网络在未显式配置 allow_local_binding 时改为默认允许本地绑定，避免默认配置因 MXC 无法强制禁止 host-loopback 而直接不可用。",
+    "details": [
+      "allow_local_binding 未填写时不再提前当成 false，而是等确定实际执行器后再取默认值：Windows MXC 为 true，其他环境和远程执行仍为 false。",
+      "MXC 的 host-loopback 天生是双向的，无法真正执行 allow_local_binding=false，因此最终策略若仍要求 false，会明确拒绝，而不是假装已经隔离。",
+      "远程网络审批会使用执行器最终解析出的值，同时继续尊重控制端显式施加的限制；代理的域名规则仍然生效。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46523"
+  },
+  {
+    "pr": 46522,
+    "merged_at": "2026-09-18T23:59:53Z",
+    "summary": "Guardian 审查会话现在默认复用父会话已经加密保存的 compaction（上下文压缩结果），重启审查时不再默认走旧的重复处理方式。",
+    "details": [
+      "guardian_reuse_parent_compaction 功能从实验状态提升为 stable，并默认开启。",
+      "Guardian 重启 review session 时可以直接复用父会话的加密压缩上下文；父历史发生变化时，相应缓存会自动失效。",
+      "显式关闭该功能仍会保留以前的行为；这次主要影响 Guardian 审查的上下文复用与恢复流程。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46522"
+  },
+  {
+    "pr": 46521,
+    "merged_at": "2026-09-18T23:59:31Z",
+    "summary": "修复 macOS 上取消或清理命令时进程组信号可能被拒绝的问题：组信号失败后会退回逐个终止成员，减少残留子进程。",
+    "details": [
+      "macOS 可能拒绝向整个 process group 发送信号，即使对组内单个进程发送同样的信号仍然允许。",
+      "terminate_process_group 和 kill_process_group 现在统一使用已有的“逐成员 fallback”，MCP 和 pipe 等调用方也改走这套共享逻辑。",
+      "取消操作超过宽限期后升级为强制结束时，会继续使用之前保存的 process-group ID，因此同样能够触发这一 fallback。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46521"
+  },
+  {
+    "pr": 46519,
+    "merged_at": "2026-09-18T23:59:09Z",
+    "summary": "仅稳定采样器和模型目录的超时测试，避免 Tokio 测试时钟自动推进导致请求还没到 mock server 就先超时；生产逻辑没有变化。",
+    "details": [
+      "相关测试现在暂停 Tokio 时间，先确认请求确实到达 mock server，再手动推进时间越过超时点。",
+      "额外加入真实时间上限，防止测试本身永久等待，并继续验证重试耗尽、连接许可恢复和 RequestTimeout 等既有行为。",
+      "此次修改只针对测试时序和稳定性，没有改变实际网络请求或超时策略。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46519"
+  },
+  {
+    "pr": 46518,
+    "merged_at": "2026-09-18T23:49:25Z",
+    "summary": "仅修复 Guardian 网络审批测试对进程启动时序的错误假设，避免慢启动时 mock 回复被发给错误请求；生产逻辑没有变化。",
+    "details": [
+      "测试不再依赖固定回复顺序，而是按请求角色和 call ID 匹配 Guardian 与父请求。",
+      "如果 exec_command 返回时进程仍在运行，测试会通过 write_stdin 继续轮询直到拿到最终输出，再判断 allow/deny 结果。",
+      "改动仅提高测试对不同机器启动速度的容忍度，不改变 Guardian 实际审批行为。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46518"
+  },
+  {
+    "pr": 46517,
+    "merged_at": "2026-09-18T23:49:01Z",
+    "summary": "仅稳定 TUI 的退出中断测试，确保测试真的等到 shell 启动后再触发退出；没有用户可见功能变化。",
+    "details": [
+      "测试改用真实存在的临时工作目录，避免干净 CI 环境中因为 fixture 目录不存在而直接失败。",
+      "固定 30 秒 sleep 被替换成由临时目录控制生命周期的循环，并同时等待 turn ID 与 exit-test-ready 输出后才执行中断。",
+      "如果 turn 在预期中断前已经结束，测试会立即失败，从而更准确地验证退出是否真正中断正在运行的命令。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46517"
+  },
+  {
+    "pr": 46516,
+    "merged_at": "2026-09-18T23:47:33Z",
+    "summary": "仅修复 Multi-Agent 恢复测试对完成时序的假设，允许孙级 agent 完成消息在边界时刻触发一次额外采样；生产逻辑没有变化。",
+    "details": [
+      "孙级 agent 恰好在 worker 结束回复时完成，worker 可能需要额外一次 sampling 来排空这条完成消息。",
+      "测试现在按嵌套 spawn 的 function_call_output 匹配完成请求，并允许出现一次或两次 worker completion 请求。",
+      "mock 的生命周期也被限制在初始 worker 阶段，避免影响后续 resume 流程；这是纯测试兼容性调整。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46516"
+  },
+  {
+    "pr": 46514,
+    "merged_at": "2026-09-18T23:40:07Z",
+    "summary": "仅加强 Guardian checkpoint 测试：恢复检查点时改用全新 session，避免旧 session 中残留的实时状态掩盖 checkpoint 缺字段的问题。",
+    "details": [
+      "原测试把 checkpoint 回放到原 session，某些应该由 checkpoint 恢复的数据可能实际上来自仍留在内存里的旧状态。",
+      "现在会把 fork 出来的历史恢复到一个新的 session，并使用匹配的 Guardian context mode。",
+      "Legacy 和 ThreadOwned 两种上下文模式的既有恢复断言继续保留；生产代码没有变化。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46514"
+  },
+  {
+    "pr": 46513,
+    "merged_at": "2026-09-18T23:39:43Z",
+    "summary": "内部重命名：多 Agent 的本地控制对象从 AgentControl 改名为 LocalAgentControl，用名称明确它负责的是本地 agent 控制；行为没有变化。",
+    "details": [
+      "核心结构体、实现块、SessionServices 引用以及相关测试和注释统一改用 LocalAgentControl。",
+      "diff 基本是同名替换，没有新增控制流程、状态字段或执行分支。",
+      "这是为了给控制对象的职责加上“Local”语义，属于内部代码整理，对用户和现有多 Agent 行为没有可见影响。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46513"
+  },
+  {
+    "pr": 46512,
+    "merged_at": "2026-09-18T23:37:50Z",
+    "summary": "Guardian 审查 checkpoint 改为直接从当前内存上下文生成，不再为了保存快照先把 transcript 刷盘再从存储重新读回来。",
+    "details": [
+      "checkpoint 现在直接捕获当前 session 的模型历史、保留的 Guardian 上下文、world state、turn context 和 token 使用量。",
+      "compaction window 元数据和 MCP resource 的来源信息也会一起保存，compact 后替换历史中的旧用户 turn 也能被正确识别。",
+      "这样可以减少不必要的存储往返，并确保后续 fork/review 恢复使用的是刚刚完成的实时上下文。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46512"
+  },
+  {
+    "pr": 46511,
+    "merged_at": "2026-09-18T23:37:25Z",
+    "summary": "恢复正在运行的线程时，会按请求的视图先筛选 active turn 内容，不再把大段 reasoning 等最终不会返回的数据完整复制一遍再丢弃。",
+    "details": [
+      "请求 Summary 时只复制首条用户消息和最终 agent 消息；请求 NotLoaded 时完全不复制 turn items。",
+      "如果响应明确要求 Full turns，仍会保留完整快照，不会因为首页只请求 summary 而误删详细内容。",
+      "主要收益是降低长线程 resume 时的内存复制和 CPU 开销，尤其是 active turn 含大量 reasoning payload 时。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46511"
+  },
+  {
+    "pr": 46510,
+    "merged_at": "2026-09-18T23:33:22Z",
+    "summary": "元数据模式恢复线程时不再复制 active turn 的消息内容，只取状态所需的元数据，减少无意义的内存开销。",
+    "details": [
+      "新增 metadata-only turn snapshot，用在 resume 状态检查和 TurnItemsView::NotLoaded 的初始页面。",
+      "只有真正需要 Summary 或 Full 内容时才会复制 turn items；这些视图原有的数据完整性保持不变。",
+      "这是性能和内存占用优化，不改变用户看到的 resume 数据。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46510"
+  },
+  {
+    "pr": 46509,
+    "merged_at": "2026-09-18T23:28:25Z",
+    "summary": "Guardian 给父线程返回审查结论前，会先把完整 review transcript 和 TurnComplete 一起持久化，避免被批准的动作已经开始但审查完成状态还没保存。",
+    "details": [
+      "之前 parent 可能先收到 allow/deny 决定，再等待 reviewer 的终止事件写入存储，形成执行与持久化顺序不一致。",
+      "现在完成结果只有在 transcript 与 TurnComplete 一并 flush 成功后才交给父线程；同时提前清除 reviewer 的 active turn，让同一 reviewer 可以立刻接下一次审查。",
+      "错误和取消路径原有的完成前 flush 仍保留，并跳过 Guardian reviewer 上重复的 completion flush。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46509"
+  },
+  {
+    "pr": 46508,
+    "merged_at": "2026-09-18T23:26:25Z",
+    "summary": "切换或刷新认证凭据后，开始下一轮前会检查并刷新模型目录，避免继续使用属于旧账号/旧身份的模型元数据。",
+    "details": [
+      "用户 turn 和 mailbox 唤醒在开始前都会比较当前认证身份与内存中的 model catalog；命令式延迟凭据也会先解析后再比较。",
+      "身份匹配时复用缓存，不匹配时重新获取模型；认证解析和缓存访问总共受 5 秒 deadline 限制，失败或超时仍按现有 fallback 继续。",
+      "这能避免凭据轮换后上下文窗口、模型能力等信息来自错误身份；如果唤醒期间 turn 已被中断，也不会在目录刷新结束后误启动新 turn。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46508"
+  },
+  {
+    "pr": 46507,
+    "merged_at": "2026-09-18T23:26:02Z",
+    "summary": "仅调整 Windows 沙箱测试的并发方式，防止多个本地测试同时轮换机器级沙箱账户密码互相干扰；生产沙箱逻辑没有变化。",
+    "details": [
+      "windows-sandbox-rs 测试增加 Bazel exclusive-if-local 标记，本地执行时不会与会修改同一批机器级账户的测试并发运行。",
+      "elevated non-TTY command 测试若无法创建 session，现在会打印完整错误链和 sandbox log，便于定位 CI/本机失败。",
+      "改动作用于测试调度和诊断，不改变正常 Codex 的 Windows 沙箱权限或账户管理行为。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46507"
+  },
+  {
+    "pr": 46506,
+    "merged_at": "2026-09-18T23:17:31Z",
+    "summary": "ChatGPT 的 HTTP 与安全 WebSocket 连接现在共享允许范围内的基础设施 Cookie，使负载均衡/路由 Cookie 能跨两种传输继续生效。",
+    "details": [
+      "WebSocket 握手会复用 HTTP client 已保存的 ChatGPT Cookie，并保存握手响应里的允许列表基础设施 Cookie，包括升级被拒绝时返回的新路由 Cookie。",
+      "显式 Cookie header 仍优先；自动生成的 Cookie header 会被标记为敏感信息。账户和 session Cookie 不会进入这份共享存储。",
+      "wss 会按 HTTPS 的 host/path/scope 规则使用 Cookie；不安全的 ws 和非 ChatGPT 主机不会带上这些 Cookie。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46506"
+  },
+  {
+    "pr": 46505,
+    "merged_at": "2026-09-18T23:17:10Z",
+    "summary": "Multi-Agent V2 的六个工具现在可以从模型目录读取参数 JSON Schema，让不同模型甚至同一轮中切换后的模型使用各自声明的工具参数结构。",
+    "details": [
+      "catalog tool message 新增可选 parameters，并会应用到六个 Multi-Agent V2 工具的普通、namespace 和 code-mode 暴露形式。",
+      "schema 会跟随当前 active model 选择，因此 turn 中途换模型后也会切到新模型对应的参数定义。",
+      "只接受现有 JsonSchema 子集支持的 object schema，并保留加密字段注解；缺失、非法、不支持或漏掉加密属性时会退回内置参数。",
+      "工具真正执行时的参数解析和业务逻辑没有改变，变化主要发生在向模型暴露的工具 schema。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46505"
+  },
+  {
+    "pr": 46504,
+    "merged_at": "2026-09-18T23:16:18Z",
+    "summary": "TUI 新增 6 套内置主题，并让选中/激活控件真正使用主题定义的 accent 色；diff 背景和 Windows 调色板识别也更贴合实际终端。",
+    "details": [
+      "新增 ada、babbage、curie、cushman、dali、davinci 六套主题，可直接配置或从 theme picker 选择；同名自定义主题仍按既有优先级覆盖。",
+      "truecolor 和 256 色终端的 active/selected 控件会使用 codex.accent，低色深终端继续使用原有 fallback。",
+      "diff 可以尊重终端默认背景并清掉对应 gutter 填充，因此 dali/davinci 能显示无背景填充的 diff。",
+      "Windows 只有真正的 ConsoleWindowClass 才使用 native palette fallback，避免 ConPTY 调色板被误当成当前渲染颜色。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46504"
+  },
+  {
+    "pr": 46503,
+    "merged_at": "2026-09-18T23:15:53Z",
+    "summary": "TUI 各处开始优先显示模型目录提供的友好名称，而不是直接把内部 model ID 暴露给用户；底层选择和保存仍使用原 ID。",
+    "details": [
+      "模型选择器、reasoning 选择器、会话标题、状态栏和终端标题都会使用 catalog display name。",
+      "不在 catalog 里的模型仍使用 fallback 标签；即使多个模型显示名相同或显示名动态变化，选中状态仍按 model ID 跟踪。",
+      "选择一个友好名称后持久化的仍是原始 model ID，因此配置兼容性和实际模型路由不会因显示名称改变。",
+      "完整模型选择器里旧的 legacy-model 提示也被移除。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46503"
+  },
+  {
+    "pr": 46501,
+    "merged_at": "2026-09-18T23:07:50Z",
+    "summary": "扩充每次采样随附的诊断/报告元数据，能更准确记录配置、功能开关和 context window 状态；这是遥测与诊断变化，不直接改变模型行为。",
+    "details": [
+      "不再只上传一个合并后的“已启用功能列表”，而是记录明确白名单中的标量配置，以及每个功能单独的布尔 tag。",
+      "区分用户显式配置的 context-window override 与模型最终实际限制；配置被移除时会明确写 unset，避免旧值残留在后续报告中。",
+      "tags_json 会展开进入 report metadata，tag 上限从 64 提升到 512；达到上限后已有 tag 仍允许更新。",
+      "主要用于问题诊断和报告数据准确性，没有新增用户交互功能。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46501"
+  },
+  {
+    "pr": 46500,
+    "merged_at": "2026-09-18T23:07:26Z",
+    "summary": "加固 macOS Seatbelt 沙箱：在没有全盘写权限时显式禁止两种能通过只读文件描述符修改文件的 fcntl，堵住绕过 file-write/file-ioctl 限制的路径。",
+    "details": [
+      "F_MAKECOMPRESSED 和 F_TRANSFEREXTENTS 即使拿的是 read-only descriptor 也可能改变文件内容或元数据，普通 file-write* 拒绝规则并不足以拦住。",
+      "只要当前 filesystem sandbox policy 没有 full disk write，就额外拒绝 system-fcntl 命令 80 和 110。",
+      "read-only 与 workspace-write 模式下这两种操作现在应返回 EPERM，且文件内容和元数据保持不变；无限制模式仍允许正常执行。",
+      "这是实际的沙箱安全修复，不只是测试或重构。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46500"
+  },
+  {
+    "pr": 46499,
+    "merged_at": "2026-09-18T23:07:02Z",
+    "summary": "使用环境自带网络策略时，显式 require_escalated 命令不再在审批前被直接拒绝，而是进入正常提权审批；获批后可按权限绕过受管网络代理。",
+    "details": [
+      "以前 environment-owned network policy 会在命令真正进入用户 approval 之前拦掉 sandbox escalation，现在允许它进入标准审批流程。",
+      "如果获批的是完全提权，可绕过 managed network proxy；但 denied-read 等文件读取限制仍会保留，并继续维持执行这些限制所需的 sandbox/proxy。",
+      "对已保留 terminal 的后续 write_stdin，如果它的启动权限或网络状态需要更高权限，现在会要求 escalation review，而不是直接拒绝输入。",
+      "这会改变受管网络环境下提权命令和 retained terminal 的实际审批体验。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46499"
+  },
+  {
+    "pr": 46498,
+    "merged_at": "2026-09-18T23:05:44Z",
+    "summary": "使用 --worktree 启动的会话现在可以连接已经存在的本地 Codex daemon，不再因为 worktree 选项本身被强制退回 embedded 模式。",
+    "details": [
+      "--worktree 和布尔 features.worktrees override 不再让会话失去 daemon eligibility；其他配置 override 和 --no-daemon 的原有限制仍保留。",
+      "worktree 的创建和归属仍由客户端负责，线程请求则可以复用已有 daemon 后端。",
+      "通过 --worktree 启动时不会为了它自动拉起新的 daemon，所以只有本地 daemon 已经存在时才会连接复用。"
+    ],
+    "url": "https://github.com/openai/codex/pull/46498"
+  },
+  {
     "pr": 46495,
     "merged_at": "2026-09-18T22:53:35Z",
     "summary": "修正 macOS 打包版 CLI 的代码签名身份：即使被装进 app bundle，CLI 的签名标识仍保持为 codex，避免既有钥匙串访问规则因身份变化而失效。",
