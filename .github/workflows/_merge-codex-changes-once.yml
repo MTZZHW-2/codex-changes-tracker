@@ -1,0 +1,125 @@
+name: One-time Codex changes update
+
+on:
+  push:
+    paths:
+      - .github/workflows/_merge-codex-changes-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge new PR records into changes.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["REPO"]
+          api = f"https://api.github.com/repos/{repo}/contents/changes.json"
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "codex-changes-tracker-update",
+          }
+
+          req = urllib.request.Request(api + "?ref=main", headers=headers)
+          with urllib.request.urlopen(req) as response:
+              current = json.load(response)
+
+          records = json.loads(base64.b64decode(current["content"]).decode("utf-8"))
+          new_records = [
+              {
+                  "pr": 46867,
+                  "merged_at": "2026-09-20T18:27:10Z",
+                  "summary": "修复子 Agent 活动打断父 Agent 流式回答的问题：子 Agent 完成等生命周期事件会等主回答结束后再显示，避免把一条回答拆成多段。",
+                  "details": [
+                      "此前子 Agent 的完成或其他活动如果恰好在父 Agent 仍流式输出答案时到达，TUI 会立即渲染活动行，进而提前 flush 当前答案流，使最终回答在界面上被活动插到中间。",
+                      "现在会先把这类 subagent activity 排队，等父回答流真正结束后再按顺序显示；即使缺少最终 delta，或 turn 以中断、失败结束，也会在收尾阶段正确排空应显示的生命周期活动。",
+                      "排空活动时不会顺带打开仍在队列中的提问/提示；turn 已停止后才到达的 subagent activity 仍会显示，即使还有未解决的问题。属于直接用户可见的输出顺序修复。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/46867"
+              },
+              {
+                  "pr": 46866,
+                  "merged_at": "2026-09-20T18:26:27Z",
+                  "summary": "TUI 的 `/usage` 用量视图新增完整鼠标导航：标签页和报表控制可以点击，报表、总览和帮助也可用滚轮滚动。",
+                  "details": [
+                      "此前 usage overlay 主要依赖键盘；现在标签页和当前渲染出的报表控制都可以直接点击，并调用与对应键盘快捷键相同的动作，因此鼠标与键盘不会形成两套不同逻辑。",
+                      "鼠标滚轮会以有界的三行步长滚动当前 report、dashboard 或 `?` help，并继续分别保存各自的阅读位置，切换视图后不会共用一个滚动偏移。",
+                      "点击只对当前实际绘制的 hit target 生效；刷新数据、切换控制项或更换 surface 后留下的旧目标会被忽略，同时测试覆盖了自定义/禁用快捷键。属于直接用户可见的交互能力新增。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/46866"
+              },
+              {
+                  "pr": 46864,
+                  "merged_at": "2026-09-20T18:18:55Z",
+                  "summary": "用量报表现在会为每个页面分别记住阅读位置，并根据终端尺寸重排图表和明细，切换报表或缩放窗口时不再轻易把用户拉回别处。",
+                  "details": [
+                      "此前切换 report 会重置滚动位置，窗口 resize 也可能因为当前 selection 而把已经主动滚开的用户重新拉回；现在每个 report、dashboard 和 help 都保存独立 scroll position，只在需要保证可见选中项时调整，并尊重手工滚动。",
+                      "小尺寸报表区域会隐藏 plot，把空间优先留给数值明细；空间较大时图表会扩展到可用高度，宽屏 focused report 则把 breakdown table 放到 plot 旁边，提高不同终端尺寸下的利用率。",
+                      "chat/plan 选中行改用共享 picker 高亮并保留折行后的 padding；dashboard 会显示带日期的 plan period，按 Esc 时若 plan details 已展开会先收起，再关闭 overlay。属于直接用户可见的布局与导航改进。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/46864"
+              },
+              {
+                  "pr": 46863,
+                  "merged_at": "2026-09-20T18:18:32Z",
+                  "summary": "重做 `/usage` 仪表盘的导航布局并加入可滚动的 `?` 快捷键帮助，避免窄终端里提示折行导致报表内容上下跳动。",
+                  "details": [
+                      "此前 tabs 和上下文快捷键提示会随状态折行，尤其在窄终端中会改变报表可用高度；现在改成紧凑 tabs、固定控制行和两行 footer hints，使 report 的几何位置更稳定。",
+                      "账号 plan 被放进 `Usage` 标题，日期范围、grouping、model filter、排序和更新时间等控制统一移到报表上方，用户更容易确认当前报表所使用的条件。",
+                      "新增独立可滚动的 `?` help；关闭帮助后会恢复原来的 report selection、展开详情和阅读位置。帮助与实际键盘动作共用控制可用性判断，并让用户自定义 keybinding 优先于默认 `?` 冲突。属于直接用户可见的导航改进。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/46863"
+              },
+              {
+                  "pr": 46862,
+                  "merged_at": "2026-09-20T18:17:38Z",
+                  "summary": "修复账号身份变化后 `/usage` 可能继续显示旧账号数据的问题，同时把用量菜单压缩成更适合窄终端且能反映自定义按键的布局。",
+                  "details": [
+                      "此前 analytics 在账号身份检查失效或账号切换期间，已经加载的 report 可能继续留在界面上；现在会追踪 identity invalidation，一旦身份失效就清掉旧数据并重新加载账号和报表。",
+                      "chat/task 等异步数据在开始加载前后都会重新核对 identity，避免请求发出后账号已经变化，却仍把旧身份返回的结果接受进当前 usage view。",
+                      "`/usage` 动作标签被缩短，并改用空间不足时自动隐藏描述的 picker；`open`、`choose`、`confirm` 等提示会读取当前 list keymap，因此用户改过快捷键后提示也会跟着变化。属于数据正确性和直接用户可见 UI 的联合修复。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/46862"
+              },
+              {
+                  "pr": 46861,
+                  "merged_at": "2026-09-20T18:17:17Z",
+                  "summary": "仅清理 analytics TUI 的 snapshot 测试体系，改用更针对性的行为断言并补充边界用例；生产逻辑和用户可见功能没有变化。",
+                  "details": [
+                      "删除 analytics TUI 的 snapshot assertions、保存的 snapshot 文件，以及只为生成/序列化这些快照存在的测试辅助代码，减少大量难维护的整屏快照。",
+                      "原有关键行为和渲染检查仍保留，并新增明确断言覆盖窄屏金额显示、负 usage 值、metric 选择和 summary 滚动等边界情况。",
+                      "该 PR 的目标是测试维护方式调整，而不是改变 analytics 运行时界面或业务逻辑；属于纯测试/内部清理，没有预期的用户可见变化。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/46861"
+              }
+          ]
+
+          existing = {item["pr"] for item in records}
+          records.extend(item for item in new_records if item["pr"] not in existing)
+          records.sort(key=lambda item: item["merged_at"], reverse=True)
+          content = json.dumps(records, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+          payload = json.dumps({
+              "message": "Update merged Codex PR changes",
+              "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+              "sha": current["sha"],
+              "branch": "main",
+          }).encode("utf-8")
+          req = urllib.request.Request(api, data=payload, headers={**headers, "Content-Type": "application/json"}, method="PUT")
+          with urllib.request.urlopen(req) as response:
+              result = json.load(response)
+          print(result["commit"]["sha"])
+          PY
