@@ -1,49 +1,48 @@
-name: Render Remotion preview
+name: Update Codex tracker data
 
 on:
   push:
     branches: [main]
     paths:
-      - 'video/render-trigger.txt'
       - '.github/workflows/render-remotion-preview.yml'
-  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  render:
+  update:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          fetch-depth: 1
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Merge new PR records
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk ffmpeg
+          new = json.loads(r'''[{"pr":47082,"merged_at":"2026-09-21T18:19:52Z","summary":"TUI 的快捷键帮助现在会在语音功能可用时显示 Voice 开关及用户实际配置的切换按键（默认 F8），让语音入口可被直接发现；语音能力本身没有改变。","details":["此前 Voice 虽有 `toggle_voice` 快捷键，但快捷键 overlay 不展示这一项，用户只能知道或记住按键才能切换。","现在 overlay 会读取当前配置的 `toggle_voice` binding 并显示 Voice；只有 voice commands 已启用且当前没有 side conversation 时才出现，避免展示不可用操作。","改动只增加 TUI 帮助/快捷键展示并更新相关快照，不改变语音录制、播放或切换逻辑本身。"],"url":"https://github.com/openai/codex/pull/47082"},{"pr":47081,"merged_at":"2026-09-21T18:19:24Z","summary":"Codex 现在会跨 turn、压缩、恢复和 fork 累积记录实际用过的 MCP 来源，并把这份归属信息作为不进模型上下文的 `client_metadata` 发送给允许的 OpenAI 端点；属于归因/诊断元数据变化，没有直接 UI 变化。","details":["此前 MCP 来源归属没有一份能随线程历史持续保存的累计记录，经历 compaction、resume 或只保留近期 turn 的 fork 后，后端难以可靠知道该线程此前使用过哪些 connector/plugin。","现在每个首次出现的 MCP 来源会记录首个 turn，并覆盖直接工具调用、Code Mode、报错和未打印结果；checkpoint 会随历史保存并在 compaction、resume、fork 时恢复和去重。","每次 Responses API 请求把最新累计结果放在 `client_metadata.mcp_attribution`，而不是模型可见内容，并只允许发往受认可的 OpenAI HTTPS/WSS 目的地。","旧历史缺 checkpoint、归属数据冲突/损坏或序列化超过 16 KiB 时会标记 `attribution_error`；主要影响归因/诊断数据，不改变 MCP 工具执行结果或用户界面。"],"url":"https://github.com/openai/codex/pull/47081"},{"pr":47079,"merged_at":"2026-09-21T18:04:28Z","summary":"Linux 沙箱现在能接受“挂载了 app-server socket 目录祖先”的安全 bind-mount 布局：会主动遮蔽所有可能暴露 daemon socket 的别名，不再一律拒绝启动，同时继续阻止无法隔离 socket 的挂载。","details":["此前只要 bind mount 覆盖 daemon socket 目录的祖先，沙箱就会直接拒绝，即使实际暴露出来的 socket 路径可以在挂载后被 mask，导致某些临时目录/WSL 类布局无法启动。","现在会找出 socket 目录及其经祖先挂载暴露出的 alias，在文件系统 bind 完成后逐一遮蔽，包括只读子路径和 synthetic-mount registry 中的路径。","直接把 socket 目录/文件别名映射出去、或嵌套挂载导致无法维持隔离的情况仍然拒绝；非 UTF-8 的 mask 目标也直接拒绝，避免有损路径转换遮错位置。","这是 Linux 沙箱兼容性与安全性修复：更多原本安全的 mount 布局能启动，但 daemon socket 仍不可被沙箱进程访问。"],"url":"https://github.com/openai/codex/pull/47079"},{"pr":47077,"merged_at":"2026-09-21T17:53:21Z","summary":"环境选择和凭据刷新现在被串行化，删除环境时不会再被并发的旧刷新结果“复活”，未消费的环境快照也不再把待处理配置长期保活。","details":["此前 credential refresh 与环境增删可并发修改 selection list；一次较早开始的刷新可能用陈旧列表覆盖新状态，把用户已经移除的环境重新写回来。","现在 selection changes、configuration refresh 和 connection-listener setup 通过同一互斥保护并原地更新，避免并发写回旧快照。","环境 snapshot 只保留 selection metadata 与 resolution future，不再持有 pending configuration sender，因此环境被移除后，即使某个 snapshot future 一直未 poll，也能正确取消和释放待处理 attachment。","主要是环境生命周期/并发正确性修复，没有新增 UI；实际影响是删除与凭据刷新交错时状态更稳定，不会出现已删环境恢复或 pending 配置悬挂。"],"url":"https://github.com/openai/codex/pull/47077"},{"pr":47075,"merged_at":"2026-09-21T17:29:27Z","summary":"实验性 Agent message board 的订阅通知现在会直接带发送者、接收者和最多 150 字符的帖子预览，Agent 不必每次先按 ID 再读一次才能知道新消息内容。","details":["此前通知只提供 post/thread ID，接收 Agent 即使只想判断消息大意，也必须再调用 `read_post`/`read_thread`。","现在通知改为带 author/recipient attribution 的 `agent_message`，并附 `CHANNEL_POST` payload：sender、channel、message/thread ID 和最多 150 字符正文预览。","预览被截断时会明确提示 Agent 使用 `read_post` 获取全文；旧的 user-role 通知格式仍能被识别，避免已有历史/兼容路径失效。","改动只影响默认关闭的 Agent message board / Multi-Agent V2 实验能力，不新增普通用户界面。"],"url":"https://github.com/openai/codex/pull/47075"},{"pr":47074,"merged_at":"2026-09-21T17:29:02Z","summary":"Skills 的云端来源从内置 orchestrator 切换为宿主注入的 cloud provider，并在每个 turn 启动时刷新一次目录，使新增/移除的云 skill 与认证变化能及时反映到模型可见工具和提示中。","details":["此前 Codex 会自动注册内置 orchestrator skill provider；现在这条路径被移除，云 skills 改由 host 显式提供 provider，并统一使用 `cloud` authority 和 `c` 根别名。","新增 `cloud.skills.enabled`（默认 true，但没有 host provider 时不会凭空启用）；旧 `orchestrator.skills` 仍可解析但成为兼容性的 no-op，避免旧配置直接报错。","每个 turn 的可取消 startup 阶段只做一次 cloud discovery，随后 prompt/tool 读取固定 catalog snapshot，不会在读取过程中再次发现或无休止重试；因此 turn 内目录稳定，下一 turn 才刷新变化。","缓存按认证状态隔离：同一身份的刷新失败可继续用旧 catalog，账号/认证 scope 变化会失效缓存并丢弃旧身份下迟到的 discovery/read 结果。对使用宿主云 skills 的场景是实际行为变化；未提供 provider 时没有新增可用 skill。"],"url":"https://github.com/openai/codex/pull/47074"},{"pr":47073,"merged_at":"2026-09-21T17:26:00Z","summary":"仅稳定 Guardian context-budget 测试：测试现在会等线程真正进入 idle 再注入后续历史，避免 `TurnComplete` 与 active-turn 清理之间的竞态；生产逻辑没有变化。","details":["测试此前把 `TurnComplete` 当成“线程已完全清理”，但该事件会先于 active-turn cleanup，紧接着注入 follow-up history 可能与清理并发。","现在测试注册 `ThreadIdle` 生命周期事件，并在初始 turn 和 follow-up turn 后都等待 thread idle，再继续验证用户指令在 request budgeting 中被保留。","`changed_files=1`，只有测试同步/等待逻辑调整；Guardian 运行时、context budget 规则和用户可见行为均未修改。"],"url":"https://github.com/openai/codex/pull/47073"}]''')
 
-      - name: Install video dependencies
-        working-directory: video
-        run: npm install --no-audit --no-fund
+          path = Path('changes.json')
+          existing = json.loads(path.read_text(encoding='utf-8'))
+          seen = {int(item['pr']) for item in existing}
+          added = [item for item in new if int(item['pr']) not in seen]
+          if not added:
+              raise SystemExit(0)
+          merged = existing + added
+          merged.sort(key=lambda item: item['merged_at'], reverse=True)
+          path.write_text(json.dumps(merged, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+          PY
 
-      - name: Install TTS
-        run: pip install edge-tts
-
-      - name: Generate voiceover
-        working-directory: video
-        run: python scripts/generate_voice.py
-
-      - name: Render MP4
-        working-directory: video
-        run: npm run render
-
-      - name: Upload preview
-        uses: actions/upload-artifact@v4
-        with:
-          name: codex-remotion-preview
-          path: codex-remotion-preview.mp4
-          retention-days: 2
+          if git diff --quiet -- changes.json; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add changes.json
+          git commit -m 'Track newly merged Codex PRs [skip ci]'
+          git push origin HEAD:main
