@@ -1,0 +1,82 @@
+name: Update Codex changes once
+
+on:
+  push:
+    paths:
+      - .github/workflows/update-codex-changes-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update changes.json and remove one-shot workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("changes.json")
+          records = json.loads(path.read_text(encoding="utf-8"))
+          additions = [
+              {
+                  "pr": 47149,
+                  "merged_at": "2026-09-22T01:38:30Z",
+                  "summary": "仅刷新 Code Mode catalog 测试快照中的工具哈希，使快照与当前 collaboration 工具定义一致；生产代码和用户可见行为没有变化。",
+                  "details": [
+                      "此前 `code_mode_catalog_messages` 快照里的 collaboration namespace hash 和整体 tools hash 已与当前生成结果不一致，会导致快照测试失败或产生无意义 diff。",
+                      "这次只更新测试快照中的两个哈希值，没有修改工具 schema、工具实现、catalog 生成逻辑或运行时注册行为。",
+                      "属于纯测试基线维护；实际用户功能、模型可见工具和协议行为都没有变化。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47149"
+              },
+              {
+                  "pr": 47143,
+                  "merged_at": "2026-09-22T01:01:58Z",
+                  "summary": "把 `codex exec-server` 的 CLI 参数、配置/认证加载和启动关闭流程从主入口拆到独立模块，减少 `main.rs` 耦合；现有命令行为保持不变。",
+                  "details": [
+                      "此前 `exec-server` 的参数定义、传输校验、配置加载、认证和 shutdown 编排都堆在 `cli/src/main.rs`，主入口同时承担解析与完整服务启动逻辑，维护边界较混杂。",
+                      "现在这些逻辑集中到新的 `exec_server_command.rs`，由 `ExecServerCommand::run` 作为单一启动入口；根级 `--strict-config` 会在 dispatch 前合并进命令对象，现有测试也改走同一入口。",
+                      "Noise/Direct transport 校验、AWS SigV4、远程注册、本地监听和 telemetry/shutdown 语义都保留。属于纯内部代码组织重构，没有新 CLI 功能或用户可见行为变化。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47143"
+              },
+              {
+                  "pr": 47142,
+                  "merged_at": "2026-09-22T01:00:08Z",
+                  "summary": "Standalone Web Search 现在会遵守 `respect_system_proxy` 和 Codex 的统一代理路由，不再绕过系统代理直连搜索端点。",
+                  "details": [
+                      "此前独立 Web Search 自己创建默认 HTTP client；即使 Codex 已启用 `respect_system_proxy`，模型请求能走系统代理，`alpha/search` 搜索请求仍可能直接出网，在企业或受限网络中因此失败。",
+                      "现在 Web Search 会继承配置里的 `HttpClientFactory`，并针对实际 `alpha/search` URL 按 API route policy 异步创建客户端；搜索端点常量也与路由选择共用，避免两边地址判断漂移。",
+                      "新增回归测试在清掉环境代理后只提供 mock system proxy，确认搜索请求仍能经代理拿到结果。实际影响是开启系统代理尊重选项后，Standalone Web Search 与其他 Codex API 请求使用一致的网络路径。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47142"
+              }
+          ]
+
+          existing = {item["pr"] for item in records}
+          for item in additions:
+              if item["pr"] not in existing:
+                  records.append(item)
+          records.sort(key=lambda item: item["merged_at"], reverse=True)
+
+          allowed = {"pr", "merged_at", "summary", "details", "url"}
+          for item in records:
+              if set(item) != allowed or not isinstance(item["details"], list) or not all(isinstance(x, str) for x in item["details"]):
+                  raise SystemExit(f"invalid changes.json record: {item.get('pr')}")
+
+          path.write_text(json.dumps(records, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          PY
+
+          rm .github/workflows/update-codex-changes-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add changes.json .github/workflows/update-codex-changes-once.yml
+          git commit -m "Update Codex changes through #47149"
+          git push origin HEAD:main
