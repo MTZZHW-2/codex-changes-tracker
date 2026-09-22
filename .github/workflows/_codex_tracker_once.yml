@@ -1,0 +1,54 @@
+name: Temporary Codex tracker updater
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/_codex_tracker_once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.event.head_commit.message == 'Temporary Codex tracker updater'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update changes.json
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('changes.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          record = {
+              'pr': 47235,
+              'merged_at': '2026-09-22T09:32:35Z',
+              'summary': 'Multi-Agent 的旧版和 V2 子 Agent 创建现在统一走同一个 SpawnRequest 控制入口，由控制层集中校验子路径、标注消息来源并把实际生效的子线程配置随创建结果一起返回；这是内部架构/正确性重构，没有新增用户可见功能。',
+              'details': [
+                  '此前两个 spawn handler 分别调用不同的创建函数，V2 还在工具层自行拼 author/recipient 与 Spawn attribution；同一类“创建子 Agent 并启动首个 turn”的规则分散在多处，容易出现路径校验、消息归属或行为演进不一致。',
+                  '现在两条路径都构造 SpawnRequest 交给 LocalAgentControl::spawn：普通输入和 Agent message 都由控制层统一转换；message 型 spawn 必须使用 TriggerTurn，并从 canonical child path 推导 recipient/parent author，缺少合法子路径会直接拒绝。',
+                  'spawn 结果同时返回 LiveAgent 和 ThreadConfigSnapshot，handler 可直接读取实际生效的模型、reasoning effort、nickname/role，不再创建后再单独查询线程配置；主要减少内部耦合和状态不一致风险，测试夹具也改走同一生产入口。',
+                  '没有新增 TUI/CLI 操作；预期用户行为不变，影响集中在 Multi-Agent 创建流程的一致性、校验正确性和后续可维护性。'
+              ],
+              'url': 'https://github.com/openai/codex/pull/47235',
+          }
+          if not any(item.get('pr') == record['pr'] for item in data):
+              data.append(record)
+          data.sort(key=lambda item: item['merged_at'], reverse=True)
+          path.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add changes.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Track Codex PR #47235'
+          git push origin HEAD:main
