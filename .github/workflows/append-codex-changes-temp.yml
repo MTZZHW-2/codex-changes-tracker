@@ -1,0 +1,77 @@
+name: Append Codex changes (temporary)
+
+on:
+  push:
+    paths:
+      - .github/workflows/append-codex-changes-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Update changes.json
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          path = Path("changes.json")
+          existing = json.loads(path.read_text(encoding="utf-8"))
+          new = [
+              {
+                  "pr": 47673,
+                  "merged_at": "2026-09-23T21:43:15Z",
+                  "summary": "Windows 已注册沙箱 runner 的初始化错误现在会区分未完成、所有者或 Codex home 不匹配、正在删除等原因，并为 provisioning 失败补充具体操作上下文，让用户知道该重试 setup 还是排查对应阶段。",
+                  "details": [
+                      "此前 registered Core 的 receipt 只用一条笼统错误覆盖所有者不匹配、Codex home 不匹配、运行时正在移除和安装尚未完成等情况；尤其安装未完成时，用户看不出其实应重新执行 sandbox setup。",
+                      "现在授权检查会分别报告 owner 不匹配、Codex home 不匹配、正在删除，以及“当前安装的 app 尚未完成 setup”；最后一种情况会明确提示重试 sandbox setup，已就绪的 receipt 和 app package 变更也分别校验。",
+                      "provisioning 链路同时给保存注册信息、检查沙箱账户、解析 setup owner、配置账户/权限、读取 package 名、登录账户、准备 profile、查询 package、解析 alias 和持久化注册等失败补上阶段与账户上下文。属于用户可见的 Windows 沙箱错误诊断改进，核心权限和安装流程本身没有放宽。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47673"
+              },
+              {
+                  "pr": 47672,
+                  "merged_at": "2026-09-23T21:35:36Z",
+                  "summary": "Windows 10 的无重解析点目录打开会先把盘符别名解析成真实磁盘卷设备，再使用 `OBJ_DONT_REPARSE` 打开路径，修复普通本地盘目录被盘符链接本身误拒绝的问题，同时继续阻止文件系统 reparse point。",
+                  "details": [
+                      "此前安全目录打开会直接把 `C:\\...` 转成 `\\??\\C:\\...` 再配合 `OBJ_DONT_REPARSE` 调用 `NtCreateFile`；Windows 10 会把 Object Manager 的盘符链接本身也视为需要拒绝的重解析，因此普通本地磁盘路径都可能打不开。",
+                      "现在先用 `QueryDosDeviceW` 解析 `C:`，只接受形如 `\\Device\\HarddiskVolume<number>` 的直接磁盘卷映射，再把后续目录组件拼到该 NT 设备路径上；NamedPipe、CD-ROM、卷内子路径等映射会被拒绝。",
+                      "文件系统目录组件本身不会被 canonicalize 或提前解析，所以 junction、symlink 等真正的 reparse point 仍由 `OBJ_DONT_REPARSE` 拒绝。实际影响是 Windows 10 上正常本地目录不再被安全检查误伤，而原有防重解析保护继续保留。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47672"
+              },
+              {
+                  "pr": 47670,
+                  "merged_at": "2026-09-23T21:34:24Z",
+                  "summary": "Agent message board 的 9 个工具现在可以按当前模型目录动态使用模型专属说明，并在同一 turn 中切换模型后立即更新；只改变模型看到的工具文案，参数 schema 仍固定使用 Codex 内置定义。",
+                  "details": [
+                      "此前 message board 的 `create_channel`、`read_thread`、`post`、`subscribe` 等工具始终使用内置 description，即使当前模型 catalog 已提供对应的 Multi-Agent tool message，也无法像其他 Agent 工具一样针对模型调整说明。",
+                      "现在每个 step 会把当前 active model 的 `MultiAgentToolMessages` 传给 message-board extension：缺失或 `null` 的 description 继续回退内置文案，显式空字符串会被保留；同一 turn 中切换模型后，下一次模型请求会使用新模型对应的说明。",
+                      "catalog 试图覆盖参数时只会记录 warning，真正的 parameter schema 仍使用内置版本；Code Mode 也会保留必须的 exec tool declaration。属于模型提示/工具描述适配能力，没有新增用户界面或消息板执行语义变化。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47670"
+              }
+          ]
+
+          by_pr = {item["pr"]: item for item in existing}
+          for item in new:
+              by_pr.setdefault(item["pr"], item)
+          merged = sorted(by_pr.values(), key=lambda item: item["merged_at"], reverse=True)
+          path.write_text(json.dumps(merged, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+      - name: Commit update
+        shell: bash
+        run: |
+          if git diff --quiet -- changes.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add changes.json
+          git commit -m "chore: update Codex changes"
+          git push origin HEAD:main
