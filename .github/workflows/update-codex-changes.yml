@@ -1,0 +1,48 @@
+name: Update Codex changes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/update-codex-changes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update changes.json
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path("changes.json")
+          rows = json.loads(p.read_text(encoding="utf-8"))
+          new = [
+            {"pr":47648,"merged_at":"2026-09-23T20:05:54Z","summary":"app-server 连接受 Bearer 保护的 executor 时现在可从 RPC 或 `environments.toml` 携带认证 token，并在首次连接和重连时发送，同时限制 token 只用于加密或本机目标。","details":["此前 `environment/add` 和 URL 型 `environments.toml` 配置没有 Bearer 凭据入口，因此需要 `Authorization: Bearer` 的 executor 无法通过这套 app-server 环境连接建立会话。","现在分别新增 `authBearerToken` 和 `auth_bearer_token`，连接与重连都会发送同一 Bearer Header；不提供或传 `null` 时继续保持原来的无认证行为。","为避免凭据经明文网络或日志泄露，带 token 的目标必须是 `wss://` 或 loopback，调试输出会脱敏 token、Header 标记为 sensitive，TOML 解析错误也不再回显可能含密钥的源文本。属于实际的远程 executor 认证/安全能力扩展。"],"url":"https://github.com/openai/codex/pull/47648"},
+            {"pr":47647,"merged_at":"2026-09-23T20:05:24Z","summary":"Browser connector 的网页/JavaScript 操作现在进入与其他 computer-use 工具相同的 Guardian 审查链路，嵌套动作也会绑定到正确的原始调用，避免浏览器操作绕过或错配审批策略。","details":["此前 `node_repl`、`cua_repl` 已接入 computer-use policy 与 Guardian review，但 `connector_openai_browser` 还没有完整走同一套确认、证据记录和 JavaScript 执行审查。","现在 Browser connector 会按注册工具 metadata 保留 computer-use scope，并转发 confirmation policy、记录 review evidence、跟踪 JavaScript 执行以及处理首次调用审批。","嵌套 Browser elicitation 会与当前 invocation 关联：子动作保留自己的 review identity，但审查结果仍归到发起它的 Browser 调用；严格模式还要求能验证 Browser 身份。属于安全/审批正确性增强，没有新增浏览器 UI。"],"url":"https://github.com/openai/codex/pull/47647"},
+            {"pr":47642,"merged_at":"2026-09-23T19:54:21Z","summary":"模型目录现在可以给特定工具 namespace 或 MCP server 的“间接工具说明”加模型专属前缀，用提示文字引导不同模型理解这些工具，而不改变真正的工具 schema、搜索排序或执行路由。","details":["此前 Code Mode、`ALL_TOOLS` 和 tool search 返回的 namespace 文档只能使用通用说明，无法针对某个模型补充“这个 namespace 应该怎样理解/使用”的专属指导。","新增 `model_messages.tools.indirect_description_prefixes`，可按精确 namespace 或已配置的 MCP server 选择前缀；空白值会清掉，多个 selector 冲突到同一 namespace 时会在发模型请求前拒绝。","前缀只在渲染间接说明时生效，模型切换后会跟着换；直接 tool specification、tool search ranking 和 dispatch 都不变。属于模型提示/工具描述配置能力，没有直接用户界面变化。"],"url":"https://github.com/openai/codex/pull/47642"},
+            {"pr":47641,"merged_at":"2026-09-23T19:53:27Z","summary":"HTTP 重试现在真正遵守服务端 `Retry-After` 指定的时间点，并把错误处理期间已经耗掉的时间算进去，避免限流或过载时仍按本地退避多等或过早重试。","details":["此前即使服务器返回 `Retry-After`，HTTP 重试仍主要使用本地 backoff；相对延迟也没有扣除错误传播、telemetry/reporting 等已经过去的时间。","现在收到响应 Header 时就把秒数或 HTTP-date 转成 monotonic deadline，后续 HTTP、stream、API/Bedrock 错误映射和重试耗尽状态都携带同一 deadline；没有有效服务端建议时才退回本地退避。","如果处理错误时 deadline 已经过去，就立即按 0 延迟继续，而不会再额外套本地 backoff。实际影响是限流/服务过载恢复更贴合服务器指示，属于网络重试可靠性修复。"],"url":"https://github.com/openai/codex/pull/47641"},
+            {"pr":47639,"merged_at":"2026-09-23T19:37:57Z","summary":"TUI 新增可配置的“选中即复制”：鼠标选择 transcript 文本后可在松开时自动复制，并按终端环境自动启用或由用户强制开启/关闭。","details":["新增 `tui.copy_on_select = auto|always|never`，默认 `auto`，覆盖 fullscreen transcript、transcript overlay 以及 resume/fork 预览；此前这些视图没有统一的自动复制策略。","`auto` 会在 tmux、Zellij 和部分直接终端中启用：macOS 默认开启但排除 Ghostty/Kitty，其他平台只对识别为 iTerm2 或 Terminal.app 的直接终端开启，减少和终端自身选择语义冲突。","非空鼠标选择在 release 时复制，整词/整行选择也适用且高亮会保留；空拖选与链接点击不被破坏。composer 的键盘复制则只在剪贴板确认成功后清掉选区，失败或无法确认时继续保留。属于直接用户可见的 TUI 复制交互变化。"],"url":"https://github.com/openai/codex/pull/47639"},
+            {"pr":47638,"merged_at":"2026-09-23T19:37:31Z","summary":"远程文件系统现在把一组明确可恢复的 exec-server 准备失败标记为 `BrokenPipe`，给上层提供可重试信号，同时避免把认证、TLS 或协议错误误判成瞬时故障。","details":["此前 registry 暂时不可用、连接断开、握手/初始化超时等失败通常落成通用 `io::ErrorKind::Other`，只看错误类型的读取准备逻辑无法可靠区分“可以重试”和“确定失败”。","新增 typed 分类，覆盖临时 registry/连接错误、常见网络 I/O、握手未完成/被重置、HTTP 5xx/408/409/429、session 已被附着等；远程文件系统把这些情况映射成 `BrokenPipe`。","认证失败、TLS 错误和 malformed protocol 仍保持不可重试分类，而且不会仅凭错误文本判断。该 PR 本身主要改变错误信号，供已有的只读 preparation retry 逻辑使用；没有新增 UI。"],"url":"https://github.com/openai/codex/pull/47638"},
+            {"pr":47635,"merged_at":"2026-09-23T19:16:33Z","summary":"启动预热不再等 MCP/工具发现结束才建立 WebSocket，而是把两者并行执行，从而减少慢工具发现叠加到首次连接上的等待，并补强预连接失败后的降级。","details":["此前 startup prewarm 必须先完成 tool discovery 再开 WebSocket；MCP server 启动慢时，即使网络握手与工具发现互不依赖，也会把两段等待串起来。","现在 WebSocket handshake 与工具捕获并发，等工具和请求 metadata 最终确定后再在已建立连接上发送 `generate=false`；预连接同时带模型和实际 service-tier 路由提示，spawned subagent 会继承 tier，Guardian reviewer 则不带这些提示。","预连接阶段认证失败会走恢复流程，服务器返回 `426 Upgrade Required` 时会切回 HTTP。属于启动性能/连接可靠性优化，没有新增用户界面。"],"url":"https://github.com/openai/codex/pull/47635"},
+            {"pr":47633,"merged_at":"2026-09-23T19:12:17Z","summary":"Agent message board 的路径解析和身份校验改走当前会话选定的 `AgentControl`，不再依赖本地 registry，避免 delegated/非本地控制器下找错 Agent 或接受不属于该 Agent 的路径。","details":["此前消息板查询 Agent path、解析目标和通知接收者时直接访问 `local_agent_runtime`；当 session 使用其他 controller 或本地 registry 不完整时，路径可能无法解析或与真实 Agent 树不一致。","现在路径从 `session_source` 取得（root 有明确 fallback），再通过该会话的 `agent_control.resolve` 验证“这个路径确实解析回拥有它的 thread”；目标查找也统一走同一个 controller。","`agent_path`、clock 查询和通知接收者都会验证 thread 属于当前 board 且拥有该路径。属于 Multi-Agent V2/message-board 的内部正确性与后端解耦修复，没有新增 UI。"],"url":"https://github.com/openai/codex/pull/47633"},
+            {"pr":47630,"merged_at":"2026-09-23T19:03:27Z","summary":"Guardian 审查现在按“动作实际要执行的 environment”选择文件权限上下文，而不是复用主环境限制，修复跨环境命令/补丁可能被错误审查的问题。","details":["此前动作针对 secondary environment 时，复用的 Guardian session 仍可能拿 primary environment 的 denied-read paths/globs 来判断，造成权限过严或过松的环境错配。","现在 `environment_id` 会贯穿环境级 approval request 和 planned-action JSON，review 时按目标 environment 取并标注权限；没有 denied-read 限制时也会明确说明，而不是沿用别的环境。","目标 environment 不存在会直接拒绝审查；超过 256 字节的 environment ID 会在进入 Guardian inference 前拒绝，同时仍保留手动审批兜底。属于授权/安全正确性修复，没有新增界面功能。"],"url":"https://github.com/openai/codex/pull/47630"},
+            {"pr":47629,"merged_at":"2026-09-23T19:03:02Z","summary":"Multi-Agent V2 恢复已记录的子 Agent 时会通过父 Agent 当前配置的 `AgentControl` 加载子线程，不再硬绑本地 runtime；这是内部控制层重构，预期用户行为不变。","details":["此前 `ThreadManager` 恢复 V2 child 时会直接从 `local_agent_runtime` 构造本地 controller，即使父 session 已配置其他 `AgentControl`，恢复路径仍然绕回本地实现。","现在 `AgentControl` 新增 `ensure_child_loaded(parent, child)`，`ThreadManager` 直接调用父 session 的 controller；本地实现则读取 live parent 的当前配置后复用既有 loader，并且不会顺带发送输入。","实际作用是让子 Agent restoration 继续服从父 Agent 选择的控制后端，为非本地/抽象 controller 保持一致的恢复语义。没有新增 CLI/TUI 功能，属于内部架构/正确性调整。"],"url":"https://github.com/openai/codex/pull/47629"}
+          ]
+          existing = {r["pr"] for r in rows}
+          rows.extend(r for r in new if r["pr"] not in existing)
+          rows.sort(key=lambda r: r["merged_at"], reverse=True)
+          p.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/update-codex-changes.yml
+          git add changes.json
+          git commit -m "Update Codex merged PR changes"
+          git push
