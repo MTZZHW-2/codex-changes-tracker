@@ -1,0 +1,67 @@
+name: Temporary Codex changes update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/update-codex-changes-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update changes.json
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("changes.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          records = [
+              {
+                  "pr": 47568,
+                  "merged_at": "2026-09-23T15:06:14Z",
+                  "summary": "命令执行 analytics 现在会记录实际使用的 sandbox backend，并明确区分“旧执行端没有上报后端”和“命令明确未经过沙箱”，便于按真实隔离方式分析执行数据；这是纯遥测变化，没有用户可见功能变化。",
+                  "details": [
+                      "此前 command execution analytics 没有记录命令实际落在哪种沙箱后端，无法区分 Seatbelt、seccomp、Windows MXC 等执行方式；而旧 execution server 缺少这份信息时，也不能把“未知”误当成明确的无沙箱执行。",
+                      "现在 CommandExecution item 内部携带可选 `sandbox_type`，Unified Exec 的完成、失败和异步退出路径都会把实际观测到的 backend 继续传到 analytics，并以 `sandbox_backend` 标签输出；执行成功或失败都能保留同一份后端归属。",
+                      "明确由 user shell 直接执行且没有沙箱时会记录为 `SandboxType::None`，旧端或无法得知后端的路径则保持 `None`，因此“unsandboxed”和“unknown”不会混在一起；该字段还被排除在序列化的 command item、JSON Schema 和 TypeScript 类型之外，不改变客户端协议。",
+                      "属于遥测/可观测性补充，不改变命令如何选择沙箱、执行结果、审批逻辑或界面行为。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47568"
+              },
+              {
+                  "pr": 47565,
+                  "merged_at": "2026-09-23T15:01:38Z",
+                  "summary": "rollout 读取失败的遥测现在会区分 reader busy、blocking task join、OS I/O 和多类 zstd 解压错误，并标记失败发生在读到首行前还是之后；仅改进诊断指标，不改变实际读取或恢复行为。",
+                  "details": [
+                      "此前 `codex.rollout_compression.read` 只能记录失败阶段和通用 I/O error kind，无法判断是压缩 reader 被占用、blocking task join 失败、操作系统错误，还是具体哪类 zstd 解压问题，也不知道失败前是否已经成功读取过任何一行。",
+                      "现在第一次失败会记录受限枚举的 `reason`：包括 `reader_busy`、`task_join`、`os_error`，以及 zstd 的 invalid frame、corrupt block、checksum、resource limit、unsupported frame、dictionary 等类别；未知情况统一落到 `stream_error`，避免把高基数错误文本直接写进指标。",
+                      "另外新增 `read_progress`，区分 `before_first_line` 和 `after_first_line`；open/read 阶段的 blocking-task join failure 也会被单独分类。错误消息、文件路径和 rollout 内容明确不会进入 metric labels。",
+                      "这是纯遥测/可观测性改进，没有修改 rollout 的读取结果、重试或恢复逻辑，也没有用户可见功能变化。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47565"
+              }
+          ]
+          existing = {item.get("pr") for item in data}
+          data.extend(record for record in records if record["pr"] not in existing)
+          data.sort(key=lambda item: item["merged_at"], reverse=True)
+          path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          PY
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet -- changes.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add changes.json
+          git commit -m "Track codex PRs #47565 and #47568"
+          git push origin HEAD:main
