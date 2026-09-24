@@ -1,0 +1,78 @@
+name: Append Codex changes (temporary 2026-09-24)
+
+on:
+  push:
+    paths:
+      - .github/workflows/append-codex-changes-temp-20260924.yml
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Update changes.json
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          path = Path("changes.json")
+          existing = json.loads(path.read_text(encoding="utf-8"))
+          new = [
+              {
+                  "pr": 47714,
+                  "merged_at": "2026-09-24T01:52:24Z",
+                  "summary": "工具结果元数据超过大小预算时不再一刀切全部丢弃：单次请求预算提高到 128 KiB，并优先缩减最大的结果，同时尽量保留较小元数据和资源访问证据。",
+                  "details": [
+                      "此前 executed-tool-call 元数据总量超过请求预算后，会把所有工具结果元数据统一替换为省略标记；即使其中很多结果很小、仍能装下，也会一起丢失，单个过大的结果还可能连 `openai/resource_access` 这类资源访问证据一起丢掉。",
+                      "现在单次模型请求的工具调用元数据总预算从 32 KiB 提高到 128 KiB，单个结果仍维持 32 KiB 上限；总量超限时按结果大小优先削减最大的条目，达到预算后停止，因此较小结果可以继续保留。",
+                      "在 capture、request、direct-call retained history 等限制下，如果完整 result metadata 放不下，会先只保留 `openai/resource_access`，并优先舍弃可选结果元数据，而不是更早牺牲调用记录、来源证据或完成标记。实际影响是长工具链在元数据压力下能保留更多有用上下文；没有新增 UI。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47714"
+              },
+              {
+                  "pr": 47713,
+                  "merged_at": "2026-09-24T01:50:50Z",
+                  "summary": "重排共享配置 crate 的依赖边界，并把 TLS 与 PNG 压缩所需 feature 改为显式启用，减少对偶然传递依赖的依赖；属于内部构建/架构整理，预期运行行为不变。",
+                  "details": [
+                      "`Provider` 和 `RetryConfig` 从 `codex-api` 下沉到 `codex-client`，`codex-api` 继续 re-export 以维持现有调用方式，`codex-model-provider-info` 则直接依赖真正拥有这些类型的 client 层，降低共享配置代码对 API crate 的耦合。",
+                      "feature-state 指标的发射位置移到 `codex-core`，从而移除 `codex-features` 对 `codex-otel` 的反向依赖；指标语义本身保持不变。",
+                      "`codex-config` 的 `tonic` 与 `codex-http-client` 的 `reqwest` 现在显式打开所需 TLS feature，`codex-utils-image` 也直接启用 `png` 的 `zlib-rs`，避免这些能力只是因为其他依赖（例如 WebSocket 相关依赖）碰巧把 feature 带进来，并保持不同构建组合下 PNG 编码字节稳定。",
+                      "没有新增 CLI/TUI 功能或刻意改变网络、指标、图片处理语义；主要影响是依赖图更清晰、裁剪不同 feature 的构建更可靠。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47713"
+              },
+              {
+                  "pr": 47712,
+                  "merged_at": "2026-09-24T01:41:28Z",
+                  "summary": "Unified Exec 现在把最终输出 transcript 与待轮询输出缓冲放在同一把锁下原子更新，修复取消恰好发生在两次写入之间时两份输出可能不一致的问题。",
+                  "details": [
+                      "此前每个输出 chunk 会分别写入 completion transcript 和 pending polling buffer，两者由不同锁保护；任务若在第一次写完、第二次写入前被 cancellation 打断，同一条命令的轮询结果和最终 completion event 就可能缺少不同的内容。",
+                      "现在两份缓冲合并为同一个 `OutputBuffers` 并由共享 mutex 保护，每个 chunk 在一次临界区内同时追加到两处；这个修改同时覆盖本地 Unified Exec 和 exec-server 路径。",
+                      "polling 仍只会 drain 待轮询缓冲，而 completion event 读取保留的、有上限的 transcript，因此多次轮询不会吃掉最终完成事件需要的输出。实际影响是取消/并发边界下的输出一致性修复，没有新增用户界面。"
+                  ],
+                  "url": "https://github.com/openai/codex/pull/47712"
+              }
+          ]
+
+          by_pr = {item["pr"]: item for item in existing}
+          for item in new:
+              by_pr.setdefault(item["pr"], item)
+          merged = sorted(by_pr.values(), key=lambda item: item["merged_at"], reverse=True)
+          path.write_text(json.dumps(merged, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+      - name: Commit update
+        shell: bash
+        run: |
+          if git diff --quiet -- changes.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add changes.json
+          git commit -m "Track newly merged Codex PRs"
+          git push origin HEAD:main
