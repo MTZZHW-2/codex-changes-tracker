@@ -1,0 +1,70 @@
+name: Temporary Codex changes update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/update-codex-changes-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update changes.json
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          path = Path('changes.json')
+          existing = json.loads(path.read_text(encoding='utf-8'))
+          new_records = [
+              {
+                  'pr': 47832,
+                  'merged_at': '2026-09-24T13:10:06Z',
+                  'summary': '主要稳定 macOS Rosetta 下的 CLI 计时测试，并修正重试遥测的延迟计算：重试 deadline 和记录的 delay 现在共用一次时钟采样，避免指标比实际选定的 backoff 偏短；没有有意改变用户可见的重试策略。',
+                  'details': [
+                      'macOS x86_64/Rosetta 的首次翻译和 hard-link ctime 变化会干扰依赖启动耗时的 CLI 测试；测试现在先用 `--version` 预热 fixture，并在相关路径改用 copy 或 Unix symlink，避免反复让共享可执行文件的 Rosetta cache 失效。',
+                      'Responses 重试此前先用一次 `Instant::now()` 算 deadline，又用第二次取时计算 telemetry delay；两次取时之间已经过去的时间会让记录值比选中的本地 backoff 更短。现在用同一个 `now` 同时计算 deadline 与记录 delay，使遥测反映实际选择的退避时长。',
+                      'headerless rate-limit stream 测试在 delay-range 断言失败时会附上完整 retry telemetry event，便于排查。除测试更稳定和遥测数值更准确外，PR 没有新增功能，也没有有意改变对用户可见的重试次数或退避策略。'
+                  ],
+                  'url': 'https://github.com/openai/codex/pull/47832'
+              },
+              {
+                  'pr': 47830,
+                  'merged_at': '2026-09-24T12:34:21Z',
+                  'summary': 'Guardian 的异步评分现在会绑定动作实际所属环境及其禁止读取规则，避免把一个环境里得到的安全评分错误复用于权限不同的另一个环境；权限证据拿不到或过大时会退回同步审查。',
+                  'details': [
+                      '此前异步 Guardian classifier 没有带上目标 environment 的 denied-read 路径/通配规则，缓存评分的授权快照也没有这份权限上下文；因此同一动作形态在不同环境间可能错误复用旧 score。',
+                      '现在同步 review 和异步 scoring 共用同一套权限解析：`write_stdin` 会从实际终端进程找所属 environment，环境感知工具则按其目标 environment 收集 ID、denied paths 和 denied globs，并把这些证据传给 classifier。',
+                      '缓存的 `ScoreAuthorization` 也会保存这份 permission context；当前环境或禁止读取规则发生变化时，旧评分不再算作可授权证据。权限证据无法可靠解析，或超过异步评分的 3,000 字节上限时，不会静默省略限制，而会退回同步 Guardian review。',
+                      '这是安全/授权正确性修复，没有新增 UI；实际影响是跨 environment、后台终端输入等场景的自动审查更不容易因为缓存或缺失权限信息而放宽判断。'
+                  ],
+                  'url': 'https://github.com/openai/codex/pull/47830'
+              }
+          ]
+
+          by_pr = {int(item['pr']): item for item in existing}
+          for record in new_records:
+              by_pr[record['pr']] = record
+          updated = sorted(by_pr.values(), key=lambda item: item['merged_at'], reverse=True)
+          path.write_text(json.dumps(updated, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+      - name: Commit update
+        run: |
+          git config user.name 'codex-changes-tracker'
+          git config user.email 'actions@users.noreply.github.com'
+          git add changes.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Track merged Codex PRs 47830 and 47832'
+          git push origin HEAD:main
