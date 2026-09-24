@@ -1,0 +1,53 @@
+name: Update Codex changes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/codex-changes-update.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update changes.json
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("changes.json")
+          changes = json.loads(path.read_text(encoding="utf-8"))
+          record = {
+              "pr": 47773,
+              "merged_at": "2026-09-24T07:21:35Z",
+              "summary": "异步用户输入工具现在会采用当前模型目录提供的参数 schema，而不是始终使用 Codex 内置固定格式，让不同模型可以拿到与自身目录匹配的提问参数定义。",
+              "details": [
+                  "此前 `request_user_input_async` 的说明文字可以从 model catalog 的 `send_user_message_async` 配置覆盖，但参数 schema 仍由 Codex 代码固定生成；因此目录即使为某个模型声明了不同的异步提问参数结构，真正发给模型的工具定义也不会跟随变化。",
+                  "现在工具规划会同时读取 catalog 中的 `send_user_message_async.parameters`，解析成功后直接作为 `request_user_input_async` 的参数 schema；没有覆盖时继续使用原来的内置 questions schema，覆盖无效时也会回退并记录 warning，同时保留 catalog 提供的 description。",
+                  "schema 会随当前模型重新解析，测试覆盖同一 turn 中切换模型后参数定义同步更新，并确认 Astra 在继续工作的同时发起异步提问时，请求里实际携带 catalog schema。对用户界面没有直接变化，主要让模型专属工具契约真正生效。"
+              ],
+              "url": "https://github.com/openai/codex/pull/47773"
+          }
+
+          by_pr = {int(item["pr"]): item for item in changes}
+          by_pr[record["pr"]] = record
+          changes = sorted(by_pr.values(), key=lambda item: item["merged_at"], reverse=True)
+          path.write_text(json.dumps(changes, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+          PY
+
+      - name: Commit update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add changes.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Add Codex PR #47773"
+          git push origin HEAD:main
